@@ -1,5 +1,6 @@
 var PauseStream = require("pause-stream")
-var json = typeof JSON === "object" ? JSON : require("jsonify")
+var yaml = require('js-yaml');
+var indent = require('indent-string');
 
 // Keep a counter of all running Render's and a list of their
 // results
@@ -160,9 +161,17 @@ function encodeResult(result, count) {
         result.name.replace(/\s+/g, " ") : ""
 
     if (result.skip) {
-        output += " # SKIP"
+        output += " # SKIP";
+
+        if (typeof result.skip === 'string') {
+          output += " " + result.skip
+        }
     } else if (result.todo) {
-        output += " # TODO"
+        output += " # TODO";
+
+        if (typeof result.todo === 'string') {
+          output += " " + result.todo
+        }
     }
 
     output += "\n"
@@ -174,43 +183,20 @@ function encodeResult(result, count) {
     return output
 }
 
-function encodeError(result) {
-    var output = ""
-    var outer = "  "
-    var inner = outer + "  "
-    output += outer + "---\n"
-    output += inner + "operator: " + result.operator + "\n"
+function encodeError({ operator, expected, actual, at }) {
+    var yamlOptions = {
+      lineWidth: -1
+    };
+    var orderedResult = {};
 
-    var expected = json.stringify(result.expected, null, "  ") || ""
-    var actual = json.stringify(result.actual, null, "  ") || ""
+    if (operator) { orderedResult.operator = operator; }
+    if (expected) { orderedResult.expected = expected; }
+    if (actual) { orderedResult.actual = actual; }
+    if (at) { orderedResult.at = at; }
 
-    if (Math.max(expected.length, actual.length) > 65) {
-        expected = expected.replace(/\n/g, "\n" + inner + "  ")
-        actual = actual.replace(/\n/g, "\n" + inner + "  ")
+    var dump = yaml.safeDump(orderedResult, yamlOptions)
+      .replace('actual: ', 'actual:   ')
+      .replace('at: ', 'at:       ');
 
-        output += inner + "expected:\n" + inner + "  " + expected + "\n"
-        output += inner + "actual:\n" + inner + "  " + actual + "\n"
-    } else {
-        output += inner + "expected: " + expected + "\n"
-        output += inner + "actual:   " + actual + "\n"
-    }
-
-    if (result.at) {
-        output += inner + "at: " + result.at + "\n"
-    }
-
-    if (result.operator === "error" && result.actual &&
-        result.actual.stack
-    ) {
-        var lines = String(result.actual.stack).split("\n")
-        output += inner + "stack:\n"
-        output += inner + "  " + lines[0] + "\n"
-        for (var i = 1; i < lines.length; i++) {
-            output += inner + lines[i] + "\n"
-        }
-    }
-
-    output += outer + "...\n"
-
-    return output
+    return '  ---\n' + indent(dump, 4) + '  ...\n';
 }
